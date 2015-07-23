@@ -1,10 +1,10 @@
 use std::ptr::copy_nonoverlapping;
 use std::ops::{Index, RangeFrom, RangeTo, RangeFull};
-use std::cmp::min;
+use std::cmp::{min, max};
 use std::io::{Read, Write, Result};
 
 
-const READ_MIN: u32 = 4096;
+const READ_MIN: usize = 4096;
 const ALLOC_MIN: usize = 16384;
 
 /// Maximum size of buffer allowed.
@@ -34,6 +34,16 @@ pub struct Buf {
     remaining: u32,
 }
 
+
+// TODO(tailhook) use std::slice::bytes::copy_memory;
+fn copy_memory(src: &[u8], dst: &mut [u8]) {
+    assert!(src.len() == dst.len());
+    unsafe {
+        copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), dst.len());
+    }
+}
+
+
 impl Buf {
     pub fn new() -> Buf {
         Buf {
@@ -42,34 +52,62 @@ impl Buf {
             remaining: 0,
         }
     }
-    pub fn set_capacity(&mut self, bytes: usize) {
+    fn reserve(&mut self, bytes: usize) {
         self.data = self.data.take().map(|slice| {
-            let old_len = slice.len();
+            let old_cap = slice.len();
+            let old_bytes = old_cap - self.consumed() - self.remaining();
 
-            if self.consumed > 0 { // let's allocate new slice and move
-                let mut vec = Vec::with_capacity(bytes);
+            if self.consumed() > 0 { // let's allocate new slice and move
+                let min_size = old_bytes + bytes;
+                assert!(min_size < MAX_BUF_SIZE);
+                let mut vec = Vec::with_capacity(
+                    max(min_size, min(old_cap*2, MAX_BUF_SIZE)));
                 let cap = vec.capacity();
-                unsafe {
-                    vec.set_len(cap);
-                    copy_nonoverlapping(
-                        slice[self.consumed as usize..].as_ptr(),
-                        vec[..].as_mut_ptr(),
-                        slice.len() - self.consumed as usize
-                                    - self.remaining as usize);
-                }
-                self.remaining = self.remaining
-                    .saturating_add((cap - old_len) as u32)
-                    .saturating_add(self.consumed);
+                unsafe { vec.set_len(cap) };
+                copy_memory(&slice[self.consumed()..old_cap - self.remaining()],
+                            &mut vec[..old_bytes]);
+                self.remaining = (cap - old_bytes) as u32;
                 self.consumed = 0;
                 Some(vec.into_boxed_slice())
             } else { // just reallocate
                 let mut vec = slice.into_vec();
-                let todo = bytes - vec.len();
-                vec.reserve(todo);
+                vec.reserve(bytes);
                 let cap = vec.capacity();
                 unsafe { vec.set_len(cap) };
-                self.remaining = self.remaining
-                    .saturating_add((cap - old_len) as u32);
+                self.remaining = (cap - old_bytes) as u32;
+                Some(vec.into_boxed_slice())
+            }
+        }).unwrap_or_else(|| {
+            let mut vec = Vec::with_capacity(max(bytes, ALLOC_MIN));
+            let cap = vec.capacity();
+            unsafe { vec.set_len(cap) };
+
+            self.remaining = cap as u32;
+            Some(vec.into_boxed_slice())
+        })
+    }
+    fn reserve_exact(&mut self, bytes: usize) {
+        self.data = self.data.take().map(|slice| {
+            let old_cap = slice.len();
+            let old_bytes = old_cap - self.consumed() - self.remaining();
+
+            if self.consumed() > 0 { // let's allocate new slice and move
+                let size = old_bytes + bytes;
+                assert!(size < MAX_BUF_SIZE);
+                let mut vec = Vec::with_capacity(size);
+                let cap = vec.capacity();
+                unsafe { vec.set_len(cap) };
+                copy_memory(&slice[self.consumed()..old_cap - self.remaining()],
+                            &mut vec[..old_bytes]);
+                self.remaining = (cap - old_bytes) as u32;
+                self.consumed = 0;
+                Some(vec.into_boxed_slice())
+            } else { // just reallocate
+                let mut vec = slice.into_vec();
+                vec.reserve_exact(bytes);
+                let cap = vec.capacity();
+                unsafe { vec.set_len(cap) };
+                self.remaining = (cap - old_bytes) as u32;
                 Some(vec.into_boxed_slice())
             }
         }).unwrap_or_else(|| {
@@ -87,6 +125,15 @@ impl Buf {
     fn consumed(&self) -> usize {
         self.consumed as usize
     }
+    pub fn consume(&mut self, bytes: usize) {
+        let ln = self.len();
+        assert!(bytes < ln);
+        if bytes == ln {
+            *self = Buf::new();
+        } else {
+            self.consumed += bytes as u32;
+        }
+    }
     pub fn capacity(&self) -> usize {
         self.data.as_ref().map(|x| x.len()).unwrap_or(0)
     }
@@ -94,6 +141,9 @@ impl Buf {
         self.data.as_ref()
         .map(|x| x.len() - self.consumed() - self.remaining())
         .unwrap_or(0)
+    }
+    pub fn empty(&self) -> bool {
+        self.data.is_none()
     }
     fn future_slice<'x>(&'x mut self) -> &'x mut [u8] {
         let rem = self.remaining();
@@ -104,6 +154,17 @@ impl Buf {
         })
         .unwrap()
     }
+
+    /// Extend buffer. Note unlike Write.write() this method reserves smallest
+    /// possible chunk of memory. So it's inefficient to grow with this method.
+    /// You may use Write trait to grow intermentally.
+    pub fn extend(&mut self, buf: &[u8]) {
+        if self.remaining() < buf.len() {
+            self.reserve_exact(buf.len());
+        }
+        copy_memory(buf, &mut self.future_slice()[..buf.len()]);
+        self.remaining -= buf.len() as u32;
+    }
 }
 
 pub trait ReadBuf {
@@ -112,18 +173,15 @@ pub trait ReadBuf {
 }
 
 pub trait WriteBuf {
-    fn write_from(&mut self, buf: &mut Buf);
+    fn write_from(&mut self, buf: &mut Buf) -> Result<bool>;
 }
 
 impl<R:Read> ReadBuf for R {
 
     /// Read some bytes into buffer
     fn read_to(&mut self, buf: &mut Buf) -> Result<()> {
-        if buf.remaining < READ_MIN {
-            let ncap = buf.data.as_ref()
-                         .map(|x| min(x.len()*2, MAX_BUF_SIZE))
-                         .unwrap_or(ALLOC_MIN);
-            buf.set_capacity(ncap);
+        if buf.remaining() < READ_MIN {
+            buf.reserve(READ_MIN);
         }
         let bytes = try!(self.read(buf.future_slice()));
         debug_assert!(bytes <= buf.remaining());
@@ -140,12 +198,22 @@ impl<R:Read> ReadBuf for R {
             return Ok(true);
         }
         if buf.remaining() < todo {
-            buf.set_capacity(max);
+            buf.reserve_exact(todo);
         }
         let bytes = try!(self.read(&mut buf.future_slice()[..todo]));
-        debug_assert!(bytes < buf.remaining());
+        debug_assert!(bytes <= buf.remaining());
         buf.remaining -= bytes as u32;
         Ok(buf.len() >= max)
+    }
+}
+
+impl<W:Write> WriteBuf for W {
+    fn write_from(&mut self, buf: &mut Buf) -> Result<bool> {
+        match self.write(&buf[..]) {
+            Ok(bytes) => buf.consume(bytes),
+            Err(e) => return Err(e),
+        }
+        Ok(buf.empty())
     }
 }
 
@@ -200,13 +268,25 @@ impl Index<RangeFrom<usize>> for Buf {
     }
 }
 
+impl Write for Buf {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        if self.remaining() < buf.len() {
+            self.reserve(buf.len());
+        }
+        copy_memory(buf, &mut self.future_slice()[..buf.len()]);
+        self.remaining -= buf.len() as u32;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> Result<()> { Ok(()) }
+}
+
 #[cfg(test)]
 mod test {
+    use std::io::Write;
     use super::Buf;
     use super::ReadBuf;
     use super::ALLOC_MIN;
     use mockstream::SharedMockStream;
-    use std::iter::repeat;
 
     #[test]
     fn empty() {
@@ -269,5 +349,41 @@ mod test {
         assert_eq!(buf.len(), 1048576 + 5);
         assert_eq!(buf.capacity(), 2048 << 10);
         assert_eq!(&buf[buf.len()-10..], b"bcdefgabcd");
+    }
+
+    #[test]
+    fn two_writes() {
+        let mut buf = Buf::new();
+        assert_eq!(buf.write(b"hello").unwrap(), 5);
+        assert_eq!(buf.write(b" world").unwrap(), 6);
+        assert_eq!(&buf[..], b"hello world");
+        assert_eq!(buf.capacity(), ALLOC_MIN);
+    }
+
+    #[test]
+    fn two_extends() {
+        let mut buf = Buf::new();
+        buf.extend(b"hello");
+        buf.extend(b" world");
+        assert_eq!(&buf[..], b"hello world");
+        assert_eq!(buf.capacity(), 11);
+    }
+
+    #[test]
+    fn write_extend() {
+        let mut buf = Buf::new();
+        buf.write(b"hello").unwrap();
+        buf.extend(b" world");
+        assert_eq!(&buf[..], b"hello world");
+        assert_eq!(buf.capacity(), ALLOC_MIN);
+    }
+
+    #[test]
+    fn extend_write() {
+        let mut buf = Buf::new();
+        buf.extend(b"hello");
+        buf.write(b" world").unwrap();
+        assert_eq!(&buf[..], b"hello world");
+        assert_eq!(buf.capacity(), 16);
     }
 }
