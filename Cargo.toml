@@ -1,0 +1,8 @@
+[package]
+name = "netbuf"
+version = "0.1.0"
+authors = ["Paul Colomiets <paul@colomiets.name>"]
+
+[dev-dependencies]
+mockstream = "*"
+
