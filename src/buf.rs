@@ -127,7 +127,7 @@ impl Buf {
     }
     pub fn consume(&mut self, bytes: usize) {
         let ln = self.len();
-        assert!(bytes < ln);
+        assert!(bytes <= ln);
         if bytes == ln {
             *self = Buf::new();
         } else {
@@ -426,5 +426,18 @@ mod test {
         buf.write(b"Some larger string for you").unwrap();
         assert_eq!(&buf[..], b"loSome larger string for you");
         assert_eq!(buf.capacity(), 28);
+    }
+
+    #[test]
+    fn consume_all() {
+        let mut buf = Buf::new();
+        buf.extend(b"hello");
+        buf.write(b" world").unwrap();
+        buf.consume(11);
+        assert_eq!(buf.capacity(), 0);
+        assert_eq!(&buf[..], b"");
+        let vec: Vec<u8> = buf.into();
+        assert_eq!(&vec[..], b"");
+        assert_eq!(vec.capacity(), 0);
     }
 }
