@@ -1,5 +1,5 @@
 use std::ptr::copy_nonoverlapping;
-use std::ops::{Index, RangeFrom, RangeTo, RangeFull};
+use std::ops::{Index, RangeFrom, RangeTo, RangeFull, Range};
 use std::cmp::{min, max};
 use std::io::{Read, Write, Result};
 
@@ -268,6 +268,21 @@ impl Index<RangeFrom<usize>> for Buf {
     }
 }
 
+impl Index<Range<usize>> for Buf {
+    type Output = [u8];
+    fn index<'x>(&'x self, slice: Range<usize>) -> &'x[u8] {
+        let start = slice.start;
+        let end = slice.end;
+        if end == 0 {
+            return b"";
+        }
+        assert!(end <= self.len());
+        assert!(start <= end);
+        let buf = &self.data.as_ref().unwrap();
+        &buf[self.consumed() + start .. self.consumed() + end]
+    }
+}
+
 impl Write for Buf {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         if self.remaining() < buf.len() {
@@ -439,5 +454,49 @@ mod test {
         let vec: Vec<u8> = buf.into();
         assert_eq!(&vec[..], b"");
         assert_eq!(vec.capacity(), 0);
+    }
+
+    #[test]
+    fn ranges() {
+        let mut buf = Buf::new();
+        buf.extend(b"Hello world!");
+        assert_eq!(&buf[..], b"Hello world!");
+        assert_eq!(&buf[..0], b"");
+        assert_eq!(&buf[..5], b"Hello");
+        assert_eq!(&buf[..12], b"Hello world!");
+        assert_eq!(&buf[..7], b"Hello w");
+        assert_eq!(&buf[0..], b"Hello world!");
+        assert_eq!(&buf[3..], b"lo world!");
+        assert_eq!(&buf[6..], b"world!");
+        assert_eq!(&buf[12..], b"");
+        assert_eq!(&buf[2..8], b"llo wo");
+        assert_eq!(&buf[0..12], b"Hello world!");
+        assert_eq!(&buf[0..5], b"Hello");
+        assert_eq!(&buf[7..12], b"orld!");
+        assert_eq!(&buf[3..3], b"");
+        assert_eq!(&buf[3..9], b"lo wor");
+    }
+
+    #[test]
+    fn consume_ranges() {
+        let mut buf = Buf::new();
+        buf.extend(b"Crappy stuff");
+        buf.extend(b"Hello world!");
+        buf.consume(12);
+        assert_eq!(&buf[..], b"Hello world!");
+        assert_eq!(&buf[..0], b"");
+        assert_eq!(&buf[..5], b"Hello");
+        assert_eq!(&buf[..12], b"Hello world!");
+        assert_eq!(&buf[..7], b"Hello w");
+        assert_eq!(&buf[0..], b"Hello world!");
+        assert_eq!(&buf[3..], b"lo world!");
+        assert_eq!(&buf[6..], b"world!");
+        assert_eq!(&buf[12..], b"");
+        assert_eq!(&buf[2..8], b"llo wo");
+        assert_eq!(&buf[0..12], b"Hello world!");
+        assert_eq!(&buf[0..5], b"Hello");
+        assert_eq!(&buf[7..12], b"orld!");
+        assert_eq!(&buf[3..3], b"");
+        assert_eq!(&buf[3..9], b"lo wor");
     }
 }
