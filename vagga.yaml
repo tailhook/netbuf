@@ -40,7 +40,7 @@ containers:
       url: "http://static.rust-lang.org/dist/rust-1.1.0-x86_64-unknown-linux-gnu.tar.gz"
       script: "./install.sh --prefix=/usr --components=rustc,cargo"
 
-    - !BuildDeps [libcurl4-openssl-dev, libelf-dev, libdw-dev, cmake, gcc,
+    - !BuildDeps [libcurl4-openssl-dev, libelf-dev, libdw-dev, cmake,
                   python]
     - !Install [libdw1, libelf1, libcurl3]
     - !GitInstall
