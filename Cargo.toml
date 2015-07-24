@@ -5,8 +5,7 @@ description = """
     interface. Tuned for using it for network buffers.
 """
 readme = "README.rst"
-keywords = ["buf", "netbuf", "network", "buffer", "buffers", "vec", "vector",
-            "array", "grow"]
+keywords = ["buf", "netbuf", "network", "buffer", "vec"]
 version = "0.1.0"
 authors = ["Paul Colomiets <paul@colomiets.name>"]
 license = "MIT"
