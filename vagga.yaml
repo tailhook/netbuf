@@ -27,6 +27,11 @@ commands:
     container: ubuntu
     run: [cargo]
 
+  docs: !Command
+    description: Generate documentation
+    container: ubuntu
+    run: [cargo, doc]
+
 containers:
 
   ubuntu:

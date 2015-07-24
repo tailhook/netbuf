@@ -18,13 +18,20 @@ pub const MAX_BUF_SIZE: usize = (1 << 32) - 2;
 /// Assumptions:
 ///
 /// 1. Buffer need to be growable as sometimes requests are large
+///
 /// 2. Buffer should deallocate when empty as
 ///    most of the time connections are idle
-/// 2a. Deallocations are cheap as we have cool memory allocator (jemalloc)
-/// 2b. First allocation should be big (i.e. kilobytes) not few bytes
+///
+///      a. Deallocations are cheap as we have cool memory allocator (jemalloc)
+///
+///      b. First allocation should be big (i.e. kilobytes not few bytes)
+///
 /// 3. Should be easy too peek and get a slice as it makes packet parsing easy
+///
 /// 4. Cheap removing bytes at the start of the buf
-/// 5. Buf consumes same size as vec
+///
+/// 5. Buf itself has same size as Vec
+///
 /// 6. Buf holds upto 4Gb of memory, larger network buffers are impractical for
 ///    most use cases
 ///
