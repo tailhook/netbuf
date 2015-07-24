@@ -386,4 +386,45 @@ mod test {
         assert_eq!(&buf[..], b"hello world");
         assert_eq!(buf.capacity(), 16);
     }
+
+    #[test]
+    fn into() {
+        let mut buf = Buf::new();
+        buf.extend(b"hello");
+        buf.write(b" world").unwrap();
+        let vec: Vec<u8> = buf.into();
+        assert_eq!(&vec[..], b"hello world");
+        assert_eq!(vec.capacity(), 16);
+    }
+
+    #[test]
+    fn consumed_into() {
+        let mut buf = Buf::new();
+        buf.extend(b"hello");
+        buf.write(b" world").unwrap();
+        buf.consume(6);
+        let vec: Vec<u8> = buf.into();
+        assert_eq!(&vec[..], b"world");
+        assert_eq!(vec.capacity(), 5);
+    }
+
+    #[test]
+    fn extend_consume_extend() {
+        let mut buf = Buf::new();
+        buf.extend(b"hello");
+        buf.consume(3);
+        buf.extend(b" world");
+        assert_eq!(&buf[..], b"lo world");
+        assert_eq!(buf.capacity(), 8);
+    }
+
+    #[test]
+    fn extend_consume_write() {
+        let mut buf = Buf::new();
+        buf.extend(b"hello");
+        buf.consume(3);
+        buf.write(b"Some larger string for you").unwrap();
+        assert_eq!(&buf[..], b"loSome larger string for you");
+        assert_eq!(buf.capacity(), 28);
+    }
 }
