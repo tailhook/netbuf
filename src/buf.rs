@@ -52,6 +52,9 @@ fn copy_memory(src: &[u8], dst: &mut [u8]) {
 
 
 impl Buf {
+    /// Create empty buffer. It has no preallocated size. It's always have
+    /// deallocated underlying memory chunk when there are no useful bytes
+    /// in the buffer.
     pub fn new() -> Buf {
         Buf {
             data: None,
@@ -132,6 +135,18 @@ impl Buf {
     fn consumed(&self) -> usize {
         self.consumed as usize
     }
+
+    /// Mark the first `bytes` of the buffer as read. Basically it's shaving
+    /// off bytes from the buffer. But does it effeciently. When there are
+    /// no more bytes in the buffer it's deallocated.
+    ///
+    /// Note: Buffer currently don't shrink on calling this method. It's
+    /// assumed that all bytes will be consumed shortly. In case you're
+    /// appending to the buffer after consume, old data is discarded.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `bytes` is larger than current length of buffer
     pub fn consume(&mut self, bytes: usize) {
         let ln = self.len();
         assert!(bytes <= ln);
@@ -141,17 +156,27 @@ impl Buf {
             self.consumed += bytes as u32;
         }
     }
+
+    /// Capacity of the buffer. I.e. the bytes it is allocated for. Use for
+    /// debugging or for calculating memory usage. Note it's not guaranteed
+    /// that you can write `buf.capacity() - buf.len()` bytes without resize
     pub fn capacity(&self) -> usize {
         self.data.as_ref().map(|x| x.len()).unwrap_or(0)
     }
+
+    /// Number of useful bytes in the buffer
     pub fn len(&self) -> usize {
         self.data.as_ref()
         .map(|x| x.len() - self.consumed() - self.remaining())
         .unwrap_or(0)
     }
+
+    /// Is buffer is empty. Potentially a little bit faster than
+    /// getting `len()`
     pub fn empty(&self) -> bool {
         self.data.is_none()
     }
+
     fn future_slice<'x>(&'x mut self) -> &'x mut [u8] {
         let rem = self.remaining();
         self.data.as_mut()
@@ -162,9 +187,10 @@ impl Buf {
         .unwrap()
     }
 
-    /// Extend buffer. Note unlike Write.write() this method reserves smallest
-    /// possible chunk of memory. So it's inefficient to grow with this method.
-    /// You may use Write trait to grow intermentally.
+    /// Extend buffer. Note unlike `Write::write()` and `read_from()` this
+    /// method reserves smallest possible chunk of memory. So it's inefficient
+    /// to grow with this method.  You may use Write trait to grow
+    /// incrementally.
     pub fn extend(&mut self, buf: &[u8]) {
         if self.remaining() < buf.len() {
             self.reserve_exact(buf.len());
@@ -172,50 +198,81 @@ impl Buf {
         copy_memory(buf, &mut self.future_slice()[..buf.len()]);
         self.remaining -= buf.len() as u32;
     }
-}
 
-pub trait ReadBuf {
-    fn read_to(&mut self, buf: &mut Buf) -> Result<()>;
-    fn read_to_max(&mut self, buf: &mut Buf, max: usize) -> Result<bool>;
-}
-
-pub trait WriteBuf {
-    fn write_from(&mut self, buf: &mut Buf) -> Result<bool>;
-}
-
-impl<R:Read> ReadBuf for R {
-
-    /// Read some bytes into buffer
-    fn read_to(&mut self, buf: &mut Buf) -> Result<()> {
-        if buf.remaining() < READ_MIN {
-            buf.reserve(READ_MIN);
+    /// Read some bytes from stream (object implementing `Read`) into buffer
+    ///
+    /// Note this does *not* continue read until getting `WouldBlock`. It
+    /// passes all errors as is. It preallocates some chunk to read into
+    /// buffer, it may be possible that socket still has bytes buffered after
+    /// this method returns. This method is expected either to be called until
+    /// `WouldBlock` is returned or is used with level-triggered polling.
+    pub fn read_from<R:Read>(&mut self, stream: &mut R) -> Result<()> {
+        if self.remaining() < READ_MIN {
+            self.reserve(READ_MIN);
         }
-        let bytes = try!(self.read(buf.future_slice()));
-        debug_assert!(bytes <= buf.remaining());
-        buf.remaining -= bytes as u32;
+        let bytes = try!(stream.read(self.future_slice()));
+        debug_assert!(bytes <= self.remaining());
+        self.remaining -= bytes as u32;
         Ok(())
     }
 
-    /// Reads no more than max bytes into vector and returns boolean flag
+    /// Reads no more than max bytes into buffer and returns boolean flag
     /// of whether max bytes are reached
-    fn read_to_max(&mut self, buf: &mut Buf, max: usize) -> Result<bool> {
+    ///
+    /// Except limit on number of bytes and slightly different allocation
+    /// strategy this method has same consideration as read_from
+    ///
+    /// Note this method might be used for two purposes:
+    ///
+    /// 1. Limit number of bytes buffered until parser can process data
+    ///   (for example HTTP header size, which is number of bytes read before
+    ///   `\r\n\r\n` delimiter reached)
+    /// 2. Wait until exact number of bytes fully received
+    ///
+    /// Since we support (1) we don't preallocate buffer for exact size of
+    /// the `max` value. It also helps a little in case (2) for minimizing
+    /// DDoS attack vector. If that doesn't suit you, you may with to use
+    /// `Vec::with_capacity()` for the purpose of (2).
+    ///
+    /// On the countrary we don't overallocate more than `max` bytes, so if
+    /// you expect data to go after exact number of bytes read. You might
+    /// better use raw `read_from()` and check buffer length.
+    ///
+    pub fn read_max_from<R:Read>(&mut self, max: usize, stream: &mut R)
+        -> Result<bool>
+    {
         assert!(max < MAX_BUF_SIZE);
-        let todo = max.saturating_sub(buf.len());
+        let todo = max.saturating_sub(self.len());
         if todo == 0 {
             return Ok(true);
         }
-        if buf.remaining() < todo {
-            buf.reserve_exact(todo);
+        if self.remaining() < READ_MIN {
+            if self.capacity() * 2 < max {
+                // TODO is too large we may never need so big buffer
+                self.reserve(READ_MIN);
+            } else {
+                self.reserve_exact(todo);
+            }
         }
-        let bytes = try!(self.read(&mut buf.future_slice()[..todo]));
-        debug_assert!(bytes <= buf.remaining());
-        buf.remaining -= bytes as u32;
-        Ok(buf.len() >= max)
+        let bytes = {
+            let slc = self.future_slice();
+            let do_now = min(slc.len(), todo);
+            try!(stream.read(&mut slc[..do_now]))
+        };
+        debug_assert!(bytes <= self.remaining());
+        self.remaining -= bytes as u32;
+        Ok(self.len() >= max)
     }
-}
 
-impl<W:Write> WriteBuf for W {
-    fn write_from(&mut self, buf: &mut Buf) -> Result<bool> {
+    /// Write contents of buffer to the stream (object implementing
+    /// the Write trait). We assume that stream is non-blocking, use
+    /// `Write::write` (instead of `Write::write_all`) and return all errors
+    /// to the caller (including `WouldBlock` or `Interrupted`).
+    ///
+    /// Instead of returning number of bytes method `consume()`s bytes from
+    /// buffer, so it's safe to retry calling the method at any moment. Also
+    /// it's common pattern to append more data to the buffer between calls.
+    pub fn write_to(&mut self, buf: &mut Buf) -> Result<bool> {
         match self.write(&buf[..]) {
             Ok(bytes) => buf.consume(bytes),
             Err(e) => return Err(e),
@@ -223,6 +280,7 @@ impl<W:Write> WriteBuf for W {
         Ok(buf.empty())
     }
 }
+
 
 impl Into<Vec<u8>> for Buf {
     fn into(mut self) -> Vec<u8> {
@@ -306,7 +364,6 @@ impl Write for Buf {
 mod test {
     use std::io::Write;
     use super::Buf;
-    use super::ReadBuf;
     use super::ALLOC_MIN;
     use mockstream::SharedMockStream;
 
@@ -321,8 +378,30 @@ mod test {
         let mut s = SharedMockStream::new();
         s.push_bytes_to_read(b"hello");
         let mut buf = Buf::new();
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         assert_eq!(&buf[..], b"hello");
+    }
+
+    #[test]
+    fn read_max_from() {
+        let mut s = SharedMockStream::new();
+        s.push_bytes_to_read(b"hello");
+        let mut buf = Buf::new();
+        s.push_bytes_to_read(b"hello world");
+        assert!(!buf.read_max_from(1024*1024, &mut s).unwrap());
+        assert_eq!(&buf[..], b"hellohello world");
+        assert!(buf.capacity() < ALLOC_MIN*2);
+        s.push_bytes_to_read(b" from me!Oh, crap!");
+        assert!(buf.read_max_from(25, &mut s).unwrap());
+        assert_eq!(&buf[..], b"hellohello world from me!");
+        assert!(buf.capacity() < ALLOC_MIN*2);
+        assert!(buf.read_max_from(25, &mut s).unwrap());
+        assert_eq!(&buf[..], b"hellohello world from me!");
+        assert!(buf.capacity() < ALLOC_MIN*2);
+        buf.consume(5);
+        assert!(buf.read_max_from(22, &mut s).unwrap());
+        assert_eq!(&buf[..], b"hello world from me!Oh");
+        assert!(buf.capacity() < ALLOC_MIN*2);
     }
 
     #[test]
@@ -330,9 +409,9 @@ mod test {
         let mut s = SharedMockStream::new();
         s.push_bytes_to_read(b"hello");
         let mut buf = Buf::new();
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         s.push_bytes_to_read(b" world");
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         assert_eq!(&buf[..], b"hello world");
         assert_eq!(buf.capacity(), ALLOC_MIN);
     }
@@ -342,32 +421,32 @@ mod test {
         let mut s = SharedMockStream::new();
         s.push_bytes_to_read(b"hello");
         let mut buf = Buf::new();
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         s.push_bytes_to_read(&b"abcdefg".iter().cloned().cycle().take(1024*1024)
             .collect::<Vec<_>>()[..]);
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         assert_eq!(&buf[..9], b"helloabcd");
         assert_eq!(buf.len(), ALLOC_MIN);
         assert_eq!(buf.capacity(), ALLOC_MIN);
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         assert_eq!(buf.len(), buf.capacity());
         assert!(buf.capacity() >= 32768);
         println!("Capacity {}", buf.capacity());
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         println!("Capacity {}", buf.capacity());
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         println!("Capacity {}", buf.capacity());
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         println!("Capacity {}", buf.capacity());
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         println!("Capacity {}", buf.capacity());
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         println!("Capacity {}", buf.capacity());
-        s.read_to(&mut buf).unwrap();
+        buf.read_from(&mut s).unwrap();
         println!("Capacity {}", buf.capacity());
         assert_eq!(buf.len(), 1048576 + 5);
         assert!(buf.capacity() >= buf.len());
-        assert!(buf.capacity() <= 2048576);
+        assert!(buf.capacity() <= 2100000);
         assert_eq!(&buf[buf.len()-10..], b"bcdefgabcd");
     }
 
@@ -482,6 +561,7 @@ mod test {
         assert_eq!(&buf[3..], b"lo world!");
         assert_eq!(&buf[6..], b"world!");
         assert_eq!(&buf[12..], b"");
+        assert_eq!(&buf[0..0], b"");
         assert_eq!(&buf[2..8], b"llo wo");
         assert_eq!(&buf[0..12], b"Hello world!");
         assert_eq!(&buf[0..5], b"Hello");
