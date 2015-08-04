@@ -206,14 +206,14 @@ impl Buf {
     /// buffer, it may be possible that socket still has bytes buffered after
     /// this method returns. This method is expected either to be called until
     /// `WouldBlock` is returned or is used with level-triggered polling.
-    pub fn read_from<R:Read>(&mut self, stream: &mut R) -> Result<()> {
+    pub fn read_from<R:Read>(&mut self, stream: &mut R) -> Result<usize> {
         if self.remaining() < READ_MIN {
             self.reserve(READ_MIN);
         }
         let bytes = try!(stream.read(self.future_slice()));
         debug_assert!(bytes <= self.remaining());
         self.remaining -= bytes as u32;
-        Ok(())
+        Ok(bytes)
     }
 
     /// Reads no more than max bytes into buffer and returns boolean flag
@@ -272,12 +272,13 @@ impl Buf {
     /// Instead of returning number of bytes method `consume()`s bytes from
     /// buffer, so it's safe to retry calling the method at any moment. Also
     /// it's common pattern to append more data to the buffer between calls.
-    pub fn write_to(&mut self, buf: &mut Buf) -> Result<bool> {
-        match self.write(&buf[..]) {
-            Ok(bytes) => buf.consume(bytes),
+    pub fn write_to<W:Write>(&mut self, sock: &mut W) -> Result<usize> {
+        let bytes = match sock.write(&self[..]) {
+            Ok(bytes) => bytes,
             Err(e) => return Err(e),
-        }
-        Ok(buf.empty())
+        };
+        self.consume(bytes);
+        Ok(bytes)
     }
 }
 
@@ -378,7 +379,7 @@ mod test {
         let mut s = SharedMockStream::new();
         s.push_bytes_to_read(b"hello");
         let mut buf = Buf::new();
-        buf.read_from(&mut s).unwrap();
+        assert_eq!(buf.read_from(&mut s).unwrap(), 5);
         assert_eq!(&buf[..], b"hello");
     }
 
@@ -513,6 +514,14 @@ mod test {
         let vec: Vec<u8> = buf.into();
         assert_eq!(&vec[..], b"world");
         assert_eq!(vec.capacity(), 5);
+    }
+    #[test]
+    fn write_to() {
+        let mut s = SharedMockStream::new();
+        let mut buf = Buf::new();
+        buf.extend(b"hello world");
+        assert_eq!(buf.write_to(&mut s).unwrap(), 11);
+        assert_eq!(&s.pop_bytes_written()[..], b"hello world");
     }
 
     #[test]
