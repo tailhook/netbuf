@@ -10,7 +10,7 @@ const ALLOC_MIN: usize = 16384;
 /// Maximum size of buffer allowed.
 /// Note: we assert on this size. Most network servers should set their own
 /// limits to something much smaller.
-pub const MAX_BUF_SIZE: usize = (1 << 32) - 2;
+pub const MAX_BUF_SIZE: usize = 4294967294; // (1 << 32) - 2;
 
 ///
 /// A buffer object to be used for reading from network
@@ -518,10 +518,14 @@ mod test {
     #[test]
     fn write_to() {
         let mut s = SharedMockStream::new();
+        s.push_bytes_to_read(b"hello");
         let mut buf = Buf::new();
         buf.extend(b"hello world");
-        assert_eq!(buf.write_to(&mut s).unwrap(), 11);
-        assert_eq!(&s.pop_bytes_written()[..], b"hello world");
+        buf.write(b" world").unwrap();
+        buf.consume(6);
+        let vec: Vec<u8> = buf.into();
+        assert_eq!(&vec[..], b"world");
+        assert_eq!(vec.capacity(), 5);
     }
 
     #[test]
