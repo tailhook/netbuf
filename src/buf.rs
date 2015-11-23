@@ -518,14 +518,10 @@ mod test {
     #[test]
     fn write_to() {
         let mut s = SharedMockStream::new();
-        s.push_bytes_to_read(b"hello");
         let mut buf = Buf::new();
         buf.extend(b"hello world");
-        buf.write(b" world").unwrap();
-        buf.consume(6);
-        let vec: Vec<u8> = buf.into();
-        assert_eq!(&vec[..], b"world");
-        assert_eq!(vec.capacity(), 5);
+        assert_eq!(buf.write_to(&mut s).unwrap(), 11);
+        assert_eq!(&s.pop_bytes_written()[..], b"hello world");
     }
 
     #[test]
