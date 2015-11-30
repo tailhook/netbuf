@@ -300,6 +300,17 @@ impl Into<Vec<u8>> for Buf {
     }
 }
 
+impl Index<usize> for Buf {
+    type Output = u8;
+    fn index<'x>(&'x self, index: usize) -> &'x u8 {
+        if let Some(ref data) = self.data {
+            return &data[self.consumed() + index]
+        }
+        panic!("cannot index empty buffer");
+
+    }
+}
+
 impl Index<RangeFull> for Buf {
     type Output = [u8];
     fn index<'x>(&'x self, _idx: RangeFull) -> &'x[u8] {
@@ -555,6 +566,17 @@ mod test {
         let vec: Vec<u8> = buf.into();
         assert_eq!(&vec[..], b"");
         assert_eq!(vec.capacity(), 0);
+    }
+
+    #[test]
+    fn index() {
+        let mut buf = Buf::new();
+        buf.extend(b"Hello World!");
+        assert_eq!(buf[0], b'H');
+        assert_eq!(buf[6], b'W');
+        buf.consume(2);
+        assert_eq!(buf[2], b'o');
+        assert_eq!(buf[8], b'd');
     }
 
     #[test]
