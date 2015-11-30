@@ -173,7 +173,7 @@ impl Buf {
 
     /// Is buffer is empty. Potentially a little bit faster than
     /// getting `len()`
-    pub fn empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.data.is_none()
     }
 
