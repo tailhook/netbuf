@@ -2,6 +2,7 @@ use std::ptr::copy_nonoverlapping;
 use std::ops::{Index, RangeFrom, RangeTo, RangeFull, Range};
 use std::cmp::{min, max};
 use std::io::{Read, Write, Result};
+use std::fmt::{self, Debug};
 
 
 const READ_MIN: usize = 4096;
@@ -283,6 +284,13 @@ impl Buf {
 }
 
 
+impl Debug for Buf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Buf {{ len={}; consumed={}; remaining={} }}",
+               self.len(), self.consumed(), self.remaining())
+    }
+}
+
 impl Into<Vec<u8>> for Buf {
     fn into(mut self) -> Vec<u8> {
         if self.consumed == 0 {
@@ -383,6 +391,7 @@ mod test {
     fn empty() {
         let buf = Buf::new();
         assert_eq!(&buf[..], b"");
+        assert_eq!(format!("{:?}", buf), "Buf { len=0; consumed=0; remaining=0 }")
     }
 
     #[test]
