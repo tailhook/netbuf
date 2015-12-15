@@ -6,7 +6,7 @@ description = """
 """
 readme = "README.rst"
 keywords = ["buf", "netbuf", "network", "buffer", "vec"]
-version = "0.2.3"
+version = "0.3.0"
 authors = ["Paul Colomiets <paul@colomiets.name>"]
 license = "MIT"
 documentation = "http://tailhook.github.io/netbuf/"
