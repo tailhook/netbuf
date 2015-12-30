@@ -31,6 +31,8 @@
 #[cfg(test)] extern crate mockstream;
 
 mod buf;
+mod range;
 
 pub use buf::Buf;
 pub use buf::MAX_BUF_SIZE;
+pub use range::RangeArgument;

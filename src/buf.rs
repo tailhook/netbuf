@@ -1,8 +1,10 @@
-use std::ptr::copy_nonoverlapping;
+use std::ptr::{copy_nonoverlapping, copy};
 use std::ops::{Index, RangeFrom, RangeTo, RangeFull, Range};
 use std::cmp::{min, max};
 use std::io::{Read, Write, Result};
 use std::fmt::{self, Debug};
+
+use range::RangeArgument;
 
 
 const READ_MIN: usize = 4096;
@@ -157,6 +159,67 @@ impl Buf {
             self.consumed += bytes as u32;
         }
     }
+
+    /// Allows to remove arbitrary range of bytes
+    ///
+    /// A more comprehensive version of `consume()`. It's occasionaly useful
+    /// if you data by frames/chunks but want to buffer the whole body anyway.
+    /// E.g. in http chunked encoding you have each chunk prefixed by it's
+    /// length, but it doesn't mean you can't buffer the whole request into
+    /// the memory. This method allows to continue reading next chunk into
+    /// the same buffer while removing chunk length.
+    ///
+    /// Note: it's not super efficient, as it requires to move(copy) bytes
+    /// after the range, in case range is neither at the start nor at the
+    /// end of buffer. Still it should be faster than copying everything
+    /// to yet another buffer.
+    ///
+    /// We never shrink the buffer here (except when it becomes empty, to
+    /// keep this invariant), assuming that you will receive more data into
+    /// the buffer shortly.
+    ///
+    /// The `RangeArgument` type is a temporary type until rust provides
+    /// the one in standard library, you should use the range syntax directly:
+    /// ```
+    ///     buf.remove_range(5..7)
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if range is invalid for the buffer
+    pub fn remove_range<R: Into<RangeArgument>>(&mut self, range: R) {
+        use range::RangeArgument::*;
+        match range.into() {
+            RangeTo(x) | Range(0, x) => self.consume(x),
+            RangeFrom(0) => *self = Buf::new(),
+            RangeFrom(x) => {
+                let ln = self.len();
+                assert!(x < ln);
+                self.remaining += (ln - x) as u32;
+            }
+            Range(x, y) => {
+                let ln = self.len();
+                if x == y { return; }
+                assert!(x < y);
+                let removed_bytes = y - x;
+                assert!(y < ln);
+                let start = self.consumed() + x;
+                let end = self.consumed() + y;
+                if let Some(ref mut data) = self.data {
+                    let dlen = data.len();
+                    unsafe {
+                        copy(data[end..].as_ptr(),
+                            data[start..dlen - removed_bytes].as_mut_ptr(),
+                            dlen - end);
+                    }
+                    self.remaining += removed_bytes as u32;
+                } else {
+                    panic!("Not-existent buffere where data exists");
+                }
+            }
+        }
+    }
+
 
     /// Capacity of the buffer. I.e. the bytes it is allocated for. Use for
     /// debugging or for calculating memory usage. Note it's not guaranteed
@@ -631,5 +694,21 @@ mod test {
         assert_eq!(&buf[7..12], b"orld!");
         assert_eq!(&buf[3..3], b"");
         assert_eq!(&buf[3..9], b"lo wor");
+    }
+
+    #[test]
+    fn remove_ranges() {
+        let mut buf = Buf::new();
+        buf.extend(b"Crappy stuff");
+        buf.extend(b"Hello world!");
+        assert_eq!(&buf[..], b"Crappy stuffHello world!");
+        buf.remove_range(..4);
+        assert_eq!(&buf[..], b"py stuffHello world!");
+        buf.remove_range(3..8);
+        assert_eq!(&buf[..], b"py Hello world!");
+        buf.remove_range(7..14);
+        assert_eq!(&buf[..], b"py Hell!");
+        buf.remove_range(7..);
+        assert_eq!(&buf[..], b"py Hell");
     }
 }
