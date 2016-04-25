@@ -6,12 +6,12 @@ description = """
 """
 readme = "README.rst"
 keywords = ["buf", "netbuf", "network", "buffer", "vec"]
-version = "0.3.1"
+version = "0.3.2"
 authors = ["Paul Colomiets <paul@colomiets.name>"]
 license = "MIT"
 documentation = "http://tailhook.github.io/netbuf/"
 repository = "http://github.com/tailhook/netbuf"
 
 [dev-dependencies]
-mockstream = "*"
+mockstream = "0.0.2"
 
