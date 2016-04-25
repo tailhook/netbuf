@@ -1,5 +1,5 @@
 use std::ptr::{copy_nonoverlapping, copy};
-use std::ops::{Index, RangeFrom, RangeTo, RangeFull, Range};
+use std::ops::{Index, IndexMut, RangeFrom, RangeTo, RangeFull, Range};
 use std::cmp::{min, max};
 use std::io::{Read, Write, Result};
 use std::fmt::{self, Debug};
@@ -431,6 +431,72 @@ impl Index<Range<usize>> for Buf {
     }
 }
 
+impl IndexMut<usize> for Buf {
+    fn index_mut<'x>(&'x mut self, index: usize) -> &'x mut u8 {
+        let consumed = self.consumed();
+        if let Some(ref mut data) = self.data {
+            return &mut data[consumed + index]
+        }
+        panic!("cannot index empty buffer");
+
+    }
+}
+
+impl IndexMut<RangeFull> for Buf {
+    fn index_mut<'x>(&'x mut self, _idx: RangeFull) -> &'x mut[u8] {
+        let consumed = self.consumed();
+        let remaining = self.remaining();
+        self.data.as_mut()
+        .map(|x| {
+            let len = x.len();
+            &mut x[consumed..len - remaining]
+        })
+        .unwrap_or(&mut [])
+    }
+}
+
+impl IndexMut<RangeTo<usize>> for Buf {
+    fn index_mut<'x>(&'x mut self, slice: RangeTo<usize>) -> &'x mut[u8] {
+        let idx = slice.end;
+        if idx == 0 {
+            return &mut [];
+        }
+        assert!(idx <= self.len());
+        let consumed = self.consumed();
+        &mut self.data.as_mut().unwrap()[consumed..consumed + idx]
+    }
+}
+
+impl IndexMut<RangeFrom<usize>> for Buf {
+    fn index_mut<'x>(&'x mut self, slice: RangeFrom<usize>) -> &'x mut[u8] {
+        let idx = slice.start;
+        if idx == self.len() {
+            return &mut [];
+        }
+        assert!(idx <= self.len());
+        let consumed = self.consumed();
+        let remaining = self.remaining();
+        let mut buf = self.data.as_mut().unwrap();
+        let len = buf.len();
+        &mut buf[consumed + idx .. len - remaining]
+    }
+}
+
+impl IndexMut<Range<usize>> for Buf {
+    fn index_mut<'x>(&'x mut self, slice: Range<usize>) -> &'x mut[u8] {
+        let start = slice.start;
+        let end = slice.end;
+        if end == 0 {
+            return &mut [];
+        }
+        assert!(end <= self.len());
+        assert!(start <= end);
+        let consumed = self.consumed();
+        let buf = self.data.as_mut().unwrap();
+        &mut buf[consumed + start .. consumed + end]
+    }
+}
+
 impl Write for Buf {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         if self.remaining() < buf.len() {
@@ -652,6 +718,22 @@ mod test {
     }
 
     #[test]
+    fn index_mut() {
+        let mut buf = Buf::new();
+        buf.extend(b"Hello World!");
+        assert_eq!(buf[0], b'H');
+        buf[0] = b'h';
+        assert_eq!(buf[6], b'W');
+        buf[6] = b'M';
+        assert_eq!(&buf[..], b"hello Morld!");
+        buf.consume(2);
+        buf[1] = b'e';
+        buf[5] = b'e';
+        buf[8] = b'e';
+        assert_eq!(&buf[..], b"leo Merle!");
+    }
+
+    #[test]
     fn ranges() {
         let mut buf = Buf::new();
         buf.extend(b"Hello world!");
@@ -710,5 +792,21 @@ mod test {
         assert_eq!(&buf[..], b"py Hell!");
         buf.remove_range(7..);
         assert_eq!(&buf[..], b"py Hell");
+    }
+
+    #[test]
+    fn mut_ranges() {
+        let mut buf = Buf::new();
+        buf.extend(b"Crappy stuff");
+        buf.extend(b"Hello world!");
+        buf.consume(12);
+        buf[..].clone_from_slice(b"HELLO WORLD.");
+        assert_eq!(&buf[..], b"HELLO WORLD.");
+        buf[..5].clone_from_slice(b"hell!");
+        assert_eq!(&buf[..], b"hell! WORLD.");
+        buf[4..10].clone_from_slice(b"o worl");
+        assert_eq!(&buf[..], b"hello worlD.");
+        buf[10..].clone_from_slice(b"d!");
+        assert_eq!(&buf[..], b"hello world!");
     }
 }
