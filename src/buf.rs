@@ -499,6 +499,9 @@ impl IndexMut<Range<usize>> for Buf {
 
 impl Write for Buf {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        if buf.len() == 0 {
+            return Ok(0);
+        }
         if self.remaining() < buf.len() {
             self.reserve(buf.len());
         }
@@ -671,6 +674,13 @@ mod test {
         buf.extend(b"hello world");
         assert_eq!(buf.write_to(&mut s).unwrap(), 11);
         assert_eq!(&s.pop_bytes_written()[..], b"hello world");
+    }
+
+    #[test]
+    fn empty_write_to_empty() {
+        let mut buf = Buf::new();
+        let mut empty = Buf::new();
+        assert_eq!(empty.write_to(&mut buf).unwrap(), 0);
     }
 
     #[test]
