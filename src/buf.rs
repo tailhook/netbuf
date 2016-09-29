@@ -499,6 +499,9 @@ impl IndexMut<Range<usize>> for Buf {
 
 impl Write for Buf {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        if buf.len() == 0 {
+            return Ok(0);
+        }
         if self.remaining() < buf.len() {
             self.reserve(buf.len());
         }
