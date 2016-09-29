@@ -674,6 +674,13 @@ mod test {
     }
 
     #[test]
+    fn empty_write_to_empty() {
+        let mut buf = Buf::new();
+        let mut empty = Buf::new();
+        assert_eq!(empty.write_to(&mut buf).unwrap(), 0);
+    }
+
+    #[test]
     fn extend_consume_extend() {
         let mut buf = Buf::new();
         buf.extend(b"hello");
