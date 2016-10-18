@@ -354,6 +354,12 @@ impl Debug for Buf {
     }
 }
 
+impl AsRef<[u8]> for Buf {
+    fn as_ref(&self) -> &[u8] {
+        &self[..]
+    }
+}
+
 impl Into<Vec<u8>> for Buf {
     fn into(mut self) -> Vec<u8> {
         if self.consumed == 0 {
