@@ -3,6 +3,7 @@ use std::ops::{Index, IndexMut, RangeFrom, RangeTo, RangeFull, Range};
 use std::cmp::{min, max};
 use std::io::{Read, Write, Result};
 use std::fmt::{self, Debug};
+use std::mem::swap;
 
 use range::RangeArgument;
 
@@ -343,6 +344,45 @@ impl Buf {
         };
         self.consume(bytes);
         Ok(bytes)
+    }
+
+    /// Splits buffer into two at given index.
+    ///
+    /// `self` contains bytes `[0, at)` and the returned `Buf` contains
+    /// bytes `[at, len)`.
+    ///
+    /// Reallocates smaller part of buffer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if at > len.
+    ///
+    /// # Examples
+    /// ```rust
+    /// let mut buf = netbuf::Buf::new();
+    /// buf.extend(b"Hello World!");
+    /// let tail = buf.split_off(6);
+    /// assert_eq!(&buf[..], b"Hello ");
+    /// assert_eq!(&tail[..], b"World!");
+    /// ```
+    pub fn split_off(&mut self, at: usize) -> Buf {
+        assert!(at <= self.len());
+        let mut tail = Buf::new();
+        match self.data.as_ref().map(|x| x.len() - at > at) {
+            Some(true) => { // re-allocate self;
+                swap(&mut tail, self);
+                if at > 0 {
+                    self.extend(&tail[..at]);
+                    tail.consume(at);
+                }
+            },
+            Some(false) => { // allocate for tail;
+                tail.extend(&self[at..]);
+                self.remove_range(at..);
+            },
+            None => {}
+        }
+        tail
     }
 }
 
@@ -824,5 +864,45 @@ mod test {
         assert_eq!(&buf[..], b"hello worlD.");
         buf[10..].clone_from_slice(b"d!");
         assert_eq!(&buf[..], b"hello world!");
+    }
+
+    #[test]
+    fn split_off_realloc_self() {
+        let mut buf = Buf::new();
+        buf.reserve_exact(20);
+        buf.extend(b"Hello World");
+        let tail = buf.split_off(5);
+        assert_eq!(&buf[..], b"Hello");
+        assert_eq!(buf.consumed(), 0);
+        assert_eq!(buf.len(), 5);
+
+        assert_eq!(&tail[..], b" World");
+        assert_eq!(tail.consumed(), 5);
+        assert_eq!(tail.len(), 6);
+    }
+
+    #[test]
+    fn split_off_alloc_tail() {
+        let mut buf = Buf::new();
+        buf.reserve_exact(20);
+        buf.extend(b"Hello World!...");
+        assert_eq!(buf.capacity(), 20);
+
+        let tail = buf.split_off(11);
+        assert_eq!(&buf[..], b"Hello World");
+        assert_eq!(buf.capacity(), 20);
+        assert_eq!(buf.consumed(), 0);
+        assert_eq!(buf.len(), 11);
+
+        assert_eq!(&tail[..], b"!...");
+        assert_eq!(tail.capacity(), 4);
+        assert_eq!(tail.consumed(), 0);
+        assert_eq!(tail.len(), 4);
+
+        let mut buf = Buf::new();
+        buf.extend(b"abcdefg");
+        let tail = buf.split_off(0);
+        assert_eq!(&tail[..], b"abcdefg");
+        assert_eq!(&buf[..], b"");
     }
 }
