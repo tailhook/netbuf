@@ -195,7 +195,7 @@ impl Buf {
             RangeFrom(0) => *self = Buf::new(),
             RangeFrom(x) => {
                 let ln = self.len();
-                assert!(x < ln);
+                assert!(x <= ln);
                 self.remaining += (ln - x) as u32;
             }
             Range(x, y) => {
@@ -257,6 +257,7 @@ impl Buf {
     /// to grow with this method.  You may use Write trait to grow
     /// incrementally.
     pub fn extend(&mut self, buf: &[u8]) {
+        if buf.len() == 0 { return; }
         if self.remaining() < buf.len() {
             self.reserve_exact(buf.len());
         }
@@ -690,6 +691,15 @@ mod test {
     }
 
     #[test]
+    fn extend_empty() {
+        let mut buf = Buf::new();
+        buf.extend(b"");
+        assert_eq!(&buf[..], b"");
+        assert_eq!(buf.len(), 0);
+        assert_eq!(buf.capacity(), 0);
+    }
+
+    #[test]
     fn into() {
         let mut buf = Buf::new();
         buf.extend(b"hello");
@@ -846,6 +856,8 @@ mod test {
         assert_eq!(&buf[..], b"py Hello world!");
         buf.remove_range(7..14);
         assert_eq!(&buf[..], b"py Hell!");
+        buf.remove_range(7..);
+        assert_eq!(&buf[..], b"py Hell");
         buf.remove_range(7..);
         assert_eq!(&buf[..], b"py Hell");
     }
