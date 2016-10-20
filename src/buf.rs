@@ -690,6 +690,15 @@ mod test {
     }
 
     #[test]
+    fn extend_empty() {
+        let mut buf = Buf::new();
+        buf.extend(b"");
+        assert_eq!(&buf[..], b"");
+        assert_eq!(buf.len(), 0);
+        assert_eq!(buf.capacity(), 0);
+    }
+
+    #[test]
     fn into() {
         let mut buf = Buf::new();
         buf.extend(b"hello");
@@ -846,6 +855,8 @@ mod test {
         assert_eq!(&buf[..], b"py Hello world!");
         buf.remove_range(7..14);
         assert_eq!(&buf[..], b"py Hell!");
+        buf.remove_range(7..);
+        assert_eq!(&buf[..], b"py Hell");
         buf.remove_range(7..);
         assert_eq!(&buf[..], b"py Hell");
     }
