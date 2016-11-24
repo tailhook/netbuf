@@ -203,7 +203,7 @@ impl Buf {
                 if x == y { return; }
                 assert!(x < y);
                 let removed_bytes = y - x;
-                assert!(y < ln);
+                assert!(y <= ln);
                 let start = self.consumed() + x;
                 let end = self.consumed() + y;
                 if let Some(ref mut data) = self.data {
