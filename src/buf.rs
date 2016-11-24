@@ -203,7 +203,7 @@ impl Buf {
                 if x == y { return; }
                 assert!(x < y);
                 let removed_bytes = y - x;
-                assert!(y < ln);
+                assert!(y <= ln);
                 let start = self.consumed() + x;
                 let end = self.consumed() + y;
                 if let Some(ref mut data) = self.data {
@@ -858,8 +858,9 @@ mod test {
         assert_eq!(&buf[..], b"py Hell!");
         buf.remove_range(7..);
         assert_eq!(&buf[..], b"py Hell");
-        buf.remove_range(7..);
-        assert_eq!(&buf[..], b"py Hell");
+        let end = buf.len();
+        buf.remove_range(2..end);
+        assert_eq!(&buf[..], b"py");
     }
 
     #[test]
