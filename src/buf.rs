@@ -276,7 +276,13 @@ impl Buf {
         if self.remaining() < READ_MIN {
             self.reserve(READ_MIN);
         }
-        let bytes = try!(stream.read(self.future_slice()));
+        let bytes = match stream.read(self.future_slice()) {
+            res @ Ok(0) | res @ Err(_) => {
+                self.consume(0);
+                return res;
+            }
+            Ok(x) => x,
+        };
         debug_assert!(bytes <= self.remaining());
         self.remaining -= bytes as u32;
         Ok(bytes)
@@ -320,10 +326,21 @@ impl Buf {
                 self.reserve_exact(todo);
             }
         }
-        let bytes = {
+        let res = {
             let slc = self.future_slice();
             let do_now = min(slc.len(), todo);
-            try!(stream.read(&mut slc[..do_now]))
+            stream.read(&mut slc[..do_now])
+        };
+        let bytes = match res {
+            Ok(0) => {
+                self.consume(0);
+                return Ok(false);
+            }
+            Err(e) => {
+                self.consume(0);
+                return Err(e);
+            }
+            Ok(x) => x,
         };
         debug_assert!(bytes <= self.remaining());
         self.remaining -= bytes as u32;
@@ -561,14 +578,60 @@ impl Write for Buf {
 
 #[cfg(test)]
 mod test {
-    use std::io::Write;
+    use std::io::{self, Read, Write};
     use super::Buf;
     use super::ALLOC_MIN;
     use mockstream::SharedMockStream;
 
+    struct ReadErr;
+
+    impl Read for ReadErr {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+            Err(io::Error::new(io::ErrorKind::WouldBlock, "fake would block"))
+        }
+    }
+
     #[test]
     fn empty() {
         let buf = Buf::new();
+        assert_eq!(&buf[..], b"");
+        assert_eq!(format!("{:?}", buf), "Buf { len=0; consumed=0; remaining=0 }")
+    }
+
+    #[test]
+    fn read_from_empty() {
+        let mut s = SharedMockStream::new();
+        let mut buf = Buf::new();
+        assert_eq!(buf.read_from(&mut s).unwrap(), 0);
+        assert!(buf.is_empty());
+        assert_eq!(&buf[..], b"");
+        assert_eq!(format!("{:?}", buf), "Buf { len=0; consumed=0; remaining=0 }")
+    }
+
+    #[test]
+    fn read_from_err() {
+        let mut buf = Buf::new();
+        buf.read_from(&mut ReadErr).unwrap_err();
+        assert!(buf.is_empty());
+        assert_eq!(&buf[..], b"");
+        assert_eq!(format!("{:?}", buf), "Buf { len=0; consumed=0; remaining=0 }")
+    }
+
+    #[test]
+    fn read_max_from_empty() {
+        let mut s = SharedMockStream::new();
+        let mut buf = Buf::new();
+        assert_eq!(buf.read_max_from(1024, &mut s).unwrap(), false);
+        assert!(buf.is_empty());
+        assert_eq!(&buf[..], b"");
+        assert_eq!(format!("{:?}", buf), "Buf { len=0; consumed=0; remaining=0 }")
+    }
+
+    #[test]
+    fn read_max_from_err() {
+        let mut buf = Buf::new();
+        buf.read_max_from(1024, &mut ReadErr).unwrap_err();
+        assert!(buf.is_empty());
         assert_eq!(&buf[..], b"");
         assert_eq!(format!("{:?}", buf), "Buf { len=0; consumed=0; remaining=0 }")
     }
