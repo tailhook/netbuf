@@ -428,7 +428,7 @@ impl Into<Vec<u8>> for Buf {
                     unsafe { vec.set_len(nlen) };
                 }
                 vec
-            }).unwrap_or(Vec::new())
+            }).unwrap_or_else(Vec::new)
         } else {
             self[..].to_vec()
         }
