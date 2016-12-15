@@ -10,11 +10,6 @@ use range::RangeArgument;
 const READ_MIN: usize = 4096;
 const ALLOC_MIN: usize = 16384;
 
-/// Maximum size of buffer allowed.
-/// Note: we assert on this size. Most network servers should set their own
-/// limits to something much smaller.
-pub const MAX_BUF_SIZE: usize = 4294967294; // (1 << 32) - 2;
-
 ///
 /// A buffer object to be used for reading from network
 ///
