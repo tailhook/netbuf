@@ -586,7 +586,7 @@ mod test {
     struct ReadErr;
 
     impl Read for ReadErr {
-        fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        fn read(&mut self, _: &mut [u8]) -> Result<usize, io::Error> {
             Err(io::Error::new(io::ErrorKind::WouldBlock, "fake would block"))
         }
     }
