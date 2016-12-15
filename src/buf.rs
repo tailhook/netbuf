@@ -68,7 +68,7 @@ impl Buf {
             if self.consumed() > 0 { // let's allocate new slice and move
                 let min_size = old_bytes + bytes;
 
-                let mut vec = Vec::with_capacity(max(min_size, old_cap*2));
+                let mut vec = Vec::with_capacity(max(min_size, old_cap.saturating_mul(2)));
                 let cap = vec.capacity();
                 unsafe { vec.set_len(cap) };
                 copy_memory(&slice[self.consumed()..old_cap - self.remaining()],
@@ -310,7 +310,7 @@ impl Buf {
             return Ok(true);
         }
         if self.remaining() < READ_MIN {
-            if self.capacity() * 2 < max {
+            if self.capacity().saturating_mul(2) < max {
                 // TODO is too large we may never need so big buffer
                 self.reserve(READ_MIN);
             } else {
