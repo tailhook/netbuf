@@ -141,7 +141,7 @@ impl Buf {
     }
 
     /// Mark the first `bytes` of the buffer as read. Basically it's shaving
-    /// off bytes from the buffer. But does it effeciently. When there are
+    /// off bytes from the buffer. But does it efficiently. When there are
     /// no more bytes in the buffer it's deallocated.
     ///
     /// Note: Buffer currently don't shrink on calling this method. It's
@@ -163,7 +163,7 @@ impl Buf {
 
     /// Allows to remove arbitrary range of bytes
     ///
-    /// A more comprehensive version of `consume()`. It's occasionaly useful
+    /// A more comprehensive version of `consume()`. It's occasionally useful
     /// if you data by frames/chunks but want to buffer the whole body anyway.
     /// E.g. in http chunked encoding you have each chunk prefixed by it's
     /// length, but it doesn't mean you can't buffer the whole request into
@@ -306,7 +306,7 @@ impl Buf {
     /// DDoS attack vector. If that doesn't suit you, you may with to use
     /// `Vec::with_capacity()` for the purpose of (2).
     ///
-    /// On the countrary we don't overallocate more than `max` bytes, so if
+    /// On the contrary we don't overallocate more than `max` bytes, so if
     /// you expect data to go after exact number of bytes read. You might
     /// better use raw `read_from()` and check buffer length.
     ///
@@ -428,7 +428,7 @@ impl Into<Vec<u8>> for Buf {
                     unsafe { vec.set_len(nlen) };
                 }
                 vec
-            }).unwrap_or(Vec::new())
+            }).unwrap_or_else(Vec::new)
         } else {
             self[..].to_vec()
         }
@@ -592,7 +592,7 @@ mod test {
     struct ReadErr;
 
     impl Read for ReadErr {
-        fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
+        fn read(&mut self, _: &mut [u8]) -> Result<usize, io::Error> {
             Err(io::Error::new(io::ErrorKind::WouldBlock, "fake would block"))
         }
     }
