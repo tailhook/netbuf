@@ -576,6 +576,12 @@ impl Write for Buf {
     fn flush(&mut self) -> Result<()> { Ok(()) }
 }
 
+impl Default for Buf {
+    fn default() -> Self {
+        Buf::new()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::io::{self, Read, Write};
