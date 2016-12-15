@@ -7,7 +7,6 @@ use std::mem::swap;
 
 use range::RangeArgument;
 
-
 const READ_MIN: usize = 4096;
 const ALLOC_MIN: usize = 16384;
 
@@ -41,8 +40,8 @@ pub const MAX_BUF_SIZE: usize = 4294967294; // (1 << 32) - 2;
 ///
 pub struct Buf {
     data: Option<Box<[u8]>>,
-    consumed: u32,
-    remaining: u32,
+    consumed: usize,
+    remaining: usize,
 }
 
 
@@ -73,14 +72,13 @@ impl Buf {
 
             if self.consumed() > 0 { // let's allocate new slice and move
                 let min_size = old_bytes + bytes;
-                assert!(min_size < MAX_BUF_SIZE);
-                let mut vec = Vec::with_capacity(
-                    max(min_size, min(old_cap*2, MAX_BUF_SIZE)));
+
+                let mut vec = Vec::with_capacity(max(min_size, old_cap*2));
                 let cap = vec.capacity();
                 unsafe { vec.set_len(cap) };
                 copy_memory(&slice[self.consumed()..old_cap - self.remaining()],
                             &mut vec[..old_bytes]);
-                self.remaining = (cap - old_bytes) as u32;
+                self.remaining = cap - old_bytes;
                 self.consumed = 0;
                 Some(vec.into_boxed_slice())
             } else { // just reallocate
@@ -88,7 +86,7 @@ impl Buf {
                 vec.reserve(bytes);
                 let cap = vec.capacity();
                 unsafe { vec.set_len(cap) };
-                self.remaining = (cap - old_bytes) as u32;
+                self.remaining = cap - old_bytes;
                 Some(vec.into_boxed_slice())
             }
         }).unwrap_or_else(|| {
@@ -96,7 +94,7 @@ impl Buf {
             let cap = vec.capacity();
             unsafe { vec.set_len(cap) };
 
-            self.remaining = cap as u32;
+            self.remaining = cap;
             Some(vec.into_boxed_slice())
         })
     }
@@ -107,13 +105,12 @@ impl Buf {
 
             if self.consumed() > 0 { // let's allocate new slice and move
                 let size = old_bytes + bytes;
-                assert!(size < MAX_BUF_SIZE);
                 let mut vec = Vec::with_capacity(size);
                 let cap = vec.capacity();
                 unsafe { vec.set_len(cap) };
                 copy_memory(&slice[self.consumed()..old_cap - self.remaining()],
                             &mut vec[..old_bytes]);
-                self.remaining = (cap - old_bytes) as u32;
+                self.remaining = cap - old_bytes;
                 self.consumed = 0;
                 Some(vec.into_boxed_slice())
             } else { // just reallocate
@@ -121,7 +118,7 @@ impl Buf {
                 vec.reserve_exact(bytes);
                 let cap = vec.capacity();
                 unsafe { vec.set_len(cap) };
-                self.remaining = (cap - old_bytes) as u32;
+                self.remaining = cap - old_bytes;
                 Some(vec.into_boxed_slice())
             }
         }).unwrap_or_else(|| {
@@ -129,7 +126,7 @@ impl Buf {
             let cap = vec.capacity();
             unsafe { vec.set_len(cap) };
 
-            self.remaining = cap as u32;
+            self.remaining = cap;
             Some(vec.into_boxed_slice())
         })
     }
@@ -157,7 +154,7 @@ impl Buf {
         if bytes == ln {
             *self = Buf::new();
         } else {
-            self.consumed += bytes as u32;
+            self.consumed += bytes;
         }
     }
 
@@ -196,7 +193,7 @@ impl Buf {
             RangeFrom(x) => {
                 let ln = self.len();
                 assert!(x <= ln);
-                self.remaining += (ln - x) as u32;
+                self.remaining += ln - x;
             }
             Range(x, y) => {
                 let ln = self.len();
@@ -213,7 +210,7 @@ impl Buf {
                             data[start..dlen - removed_bytes].as_mut_ptr(),
                             dlen - end);
                     }
-                    self.remaining += removed_bytes as u32;
+                    self.remaining += removed_bytes;
                 } else {
                     panic!("Not-existent buffere where data exists");
                 }
@@ -262,7 +259,7 @@ impl Buf {
             self.reserve_exact(buf.len());
         }
         copy_memory(buf, &mut self.future_slice()[..buf.len()]);
-        self.remaining -= buf.len() as u32;
+        self.remaining -= buf.len();
     }
 
     /// Read some bytes from stream (object implementing `Read`) into buffer
@@ -284,7 +281,7 @@ impl Buf {
             Ok(x) => x,
         };
         debug_assert!(bytes <= self.remaining());
-        self.remaining -= bytes as u32;
+        self.remaining -= bytes;
         Ok(bytes)
     }
 
@@ -313,7 +310,6 @@ impl Buf {
     pub fn read_max_from<R:Read>(&mut self, max: usize, stream: &mut R)
         -> Result<bool>
     {
-        assert!(max < MAX_BUF_SIZE);
         let todo = max.saturating_sub(self.len());
         if todo == 0 {
             return Ok(true);
@@ -343,7 +339,7 @@ impl Buf {
             Ok(x) => x,
         };
         debug_assert!(bytes <= self.remaining());
-        self.remaining -= bytes as u32;
+        self.remaining -= bytes;
         Ok(self.len() >= max)
     }
 
@@ -502,7 +498,6 @@ impl IndexMut<usize> for Buf {
             return &mut data[consumed + index]
         }
         panic!("cannot index empty buffer");
-
     }
 }
 
@@ -570,7 +565,7 @@ impl Write for Buf {
             self.reserve(buf.len());
         }
         copy_memory(buf, &mut self.future_slice()[..buf.len()]);
-        self.remaining -= buf.len() as u32;
+        self.remaining -= buf.len();
         Ok(buf.len())
     }
     fn flush(&mut self) -> Result<()> { Ok(()) }
