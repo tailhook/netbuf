@@ -569,6 +569,7 @@ impl Default for Buf {
 
 #[cfg(test)]
 mod test {
+    use std::mem::size_of;
     use std::io::{self, Read, Write};
     use super::Buf;
     use super::ALLOC_MIN;
@@ -580,6 +581,18 @@ mod test {
         fn read(&mut self, _: &mut [u8]) -> Result<usize, io::Error> {
             Err(io::Error::new(io::ErrorKind::WouldBlock, "fake would block"))
         }
+    }
+
+    #[test]
+    #[cfg(target_arch="x86_64")]
+    fn size32() {
+        assert_eq!(size_of::<Buf>(), 32);
+    }
+
+    #[test]
+    #[cfg(target_arch="x86")]
+    fn size32() {
+        assert_eq!(size_of::<Buf>(), 16);
     }
 
     #[test]
