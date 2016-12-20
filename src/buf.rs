@@ -28,11 +28,6 @@ const ALLOC_MIN: usize = 16384;
 ///
 /// 4. Cheap removing bytes at the start of the buf
 ///
-/// 5. Buf itself has same size as Vec
-///
-/// 6. Buf holds upto 4Gb of memory, larger network buffers are impractical for
-///    most use cases
-///
 pub struct Buf {
     data: Option<Box<[u8]>>,
     consumed: usize,
