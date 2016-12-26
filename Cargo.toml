@@ -1,8 +1,8 @@
 [package]
 name = "netbuf"
 description = """
-    The simple to use growable buffer object with right assumptions and
-    interface. Tuned for using it for network buffers.
+    The simple to use, growable, contiguous buffer object with right
+    assumptions and interface. Tuned for using it for network buffers.
 """
 readme = "README.rst"
 keywords = ["buf", "netbuf", "network", "buffer", "vec"]
