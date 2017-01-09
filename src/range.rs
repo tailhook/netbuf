@@ -1,6 +1,6 @@
 use std::ops::{Range, RangeFrom, RangeTo, RangeFull};
 
-/// Temporary type until the one in stdlib it made stable
+/// Temporary type until the one in stdlib is made stable
 pub enum RangeArgument {
     RangeFrom(usize),
     Range(usize, usize),

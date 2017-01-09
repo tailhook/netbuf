@@ -15,16 +15,17 @@ const ALLOC_MIN: usize = 16384;
 ///
 /// Assumptions:
 ///
-/// 1. Buffer need to be growable as sometimes requests are large
+/// 1. Buffer needs to be growable as sometimes requests are large
 ///
 /// 2. Buffer should deallocate when empty as
 ///    most of the time connections are idle
 ///
-///      a. Deallocations are cheap as we have cool memory allocator (jemalloc)
+///      a. Deallocations are cheap as we have a cool memory allocator
+///      (jemalloc)
 ///
 ///      b. First allocation should be big (i.e. kilobytes not few bytes)
 ///
-/// 3. Should be easy too peek and get a slice as it makes packet parsing easy
+/// 3. Should be easy to peek and get a slice as it makes packet parsing easy
 ///
 /// 4. Cheap removing bytes at the start of the buf
 ///
@@ -45,9 +46,9 @@ fn copy_memory(src: &[u8], dst: &mut [u8]) {
 
 
 impl Buf {
-    /// Create empty buffer. It has no preallocated size. It's always have
-    /// deallocated underlying memory chunk when there are no useful bytes
-    /// in the buffer.
+    /// Create empty buffer. It has no preallocated size. The underlying memory
+    /// chunk is always deallocated when there are no useful bytes in the
+    /// buffer.
     pub fn new() -> Buf {
         Buf {
             data: None,
@@ -128,10 +129,10 @@ impl Buf {
     }
 
     /// Mark the first `bytes` of the buffer as read. Basically it's shaving
-    /// off bytes from the buffer. But does it efficiently. When there are
+    /// off bytes from the buffer, but does it efficiently. When there are
     /// no more bytes in the buffer it's deallocated.
     ///
-    /// Note: Buffer currently don't shrink on calling this method. It's
+    /// Note: Buffer currently doesn't shrink when calling this method. It's
     /// assumed that all bytes will be consumed shortly. In case you're
     /// appending to the buffer after consume, old data is discarded.
     ///
@@ -148,16 +149,16 @@ impl Buf {
         }
     }
 
-    /// Allows to remove arbitrary range of bytes
+    /// Allows removing an arbitrary range of bytes
     ///
     /// A more comprehensive version of `consume()`. It's occasionally useful
-    /// if you data by frames/chunks but want to buffer the whole body anyway.
-    /// E.g. in http chunked encoding you have each chunk prefixed by it's
-    /// length, but it doesn't mean you can't buffer the whole request into
-    /// the memory. This method allows to continue reading next chunk into
-    /// the same buffer while removing chunk length.
+    /// if your data is in frames/chunks but you want to buffer the whole body
+    /// anyway. E.g. in http chunked encoding you have each chunk prefixed by
+    /// its length, but that doesn't mean you can't buffer the whole request
+    /// into memory. This method allows you to continue reading the next chunk
+    /// into the same buffer while removing the chunk length.
     ///
-    /// Note: it's not super efficient, as it requires to move(copy) bytes
+    /// Note: it's not super efficient, as it requires to move (copy) bytes
     /// after the range, in case range is neither at the start nor at the
     /// end of buffer. Still it should be faster than copying everything
     /// to yet another buffer.
@@ -223,7 +224,7 @@ impl Buf {
         .unwrap_or(0)
     }
 
-    /// Is buffer is empty. Potentially a little bit faster than
+    /// If buffer is empty. Potentially a little bit faster than
     /// getting `len()`
     pub fn is_empty(&self) -> bool {
         self.data.is_none()
@@ -240,9 +241,9 @@ impl Buf {
     }
 
     /// Extend buffer. Note unlike `Write::write()` and `read_from()` this
-    /// method reserves smallest possible chunk of memory. So it's inefficient
-    /// to grow with this method.  You may use Write trait to grow
-    /// incrementally.
+    /// method reserves as small as possible a chunk of memory. So it's
+    /// inefficien to grow with this method.  You may use the Write trait to
+    /// grow incrementally.
     pub fn extend(&mut self, buf: &[u8]) {
         if buf.len() == 0 { return; }
         if self.remaining() < buf.len() {
@@ -254,11 +255,11 @@ impl Buf {
 
     /// Read some bytes from stream (object implementing `Read`) into buffer
     ///
-    /// Note this does *not* continue read until getting `WouldBlock`. It
+    /// Note this does *not* continue to read until getting `WouldBlock`. It
     /// passes all errors as is. It preallocates some chunk to read into
-    /// buffer, it may be possible that socket still has bytes buffered after
-    /// this method returns. This method is expected either to be called until
-    /// `WouldBlock` is returned or is used with level-triggered polling.
+    /// buffer. It may be possible that the stream still has bytes buffered
+    /// after this method returns. This method is expected either to be called
+    /// until `WouldBlock` is returned or is used with level-triggered polling.
     pub fn read_from<R:Read>(&mut self, stream: &mut R) -> Result<usize> {
         if self.remaining() < READ_MIN {
             self.reserve(READ_MIN);
@@ -278,24 +279,25 @@ impl Buf {
     /// Reads no more than max bytes into buffer and returns boolean flag
     /// of whether max bytes are reached
     ///
-    /// Except limit on number of bytes and slightly different allocation
-    /// strategy this method has same consideration as read_from
+    /// Except for the limit on number of bytes and slightly different
+    /// allocation strategy, this method has the same considerations as
+    /// read_from
     ///
     /// Note this method might be used for two purposes:
     ///
     /// 1. Limit number of bytes buffered until parser can process data
     ///   (for example HTTP header size, which is number of bytes read before
     ///   `\r\n\r\n` delimiter reached)
-    /// 2. Wait until exact number of bytes fully received
+    /// 2. Wait until exact number of bytes are fully received
     ///
     /// Since we support (1) we don't preallocate buffer for exact size of
     /// the `max` value. It also helps a little in case (2) for minimizing
-    /// DDoS attack vector. If that doesn't suit you, you may with to use
+    /// DDoS attack vector. If that doesn't suit you, you may wish to use
     /// `Vec::with_capacity()` for the purpose of (2).
     ///
     /// On the contrary we don't overallocate more than `max` bytes, so if
-    /// you expect data to go after exact number of bytes read. You might
-    /// better use raw `read_from()` and check buffer length.
+    /// you expect data to go after exact number of bytes read, it might be
+    /// better to use `read_from()` and check buffer length.
     ///
     pub fn read_max_from<R:Read>(&mut self, max: usize, stream: &mut R)
         -> Result<bool>
@@ -338,9 +340,10 @@ impl Buf {
     /// `Write::write` (instead of `Write::write_all`) and return all errors
     /// to the caller (including `WouldBlock` or `Interrupted`).
     ///
-    /// Instead of returning number of bytes method `consume()`s bytes from
-    /// buffer, so it's safe to retry calling the method at any moment. Also
-    /// it's common pattern to append more data to the buffer between calls.
+    /// In addition to returning the number of bytes written, it also
+    /// `consume()`s those bytes from the buffer, so it's safe to retry calling
+    /// the method at any moment. Also it's a common pattern to append more
+    /// data to the buffer between calls.
     pub fn write_to<W:Write>(&mut self, sock: &mut W) -> Result<usize> {
         let bytes = match sock.write(&self[..]) {
             Ok(bytes) => bytes,
@@ -350,7 +353,7 @@ impl Buf {
         Ok(bytes)
     }
 
-    /// Splits buffer into two at given index.
+    /// Splits buffer into two at the given index.
     ///
     /// `self` contains bytes `[0, at)` and the returned `Buf` contains
     /// bytes `[at, len)`.
