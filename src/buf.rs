@@ -391,6 +391,35 @@ impl Buf {
         }
         tail
     }
+
+    /// Returns the byte at the index, or `None` if the index is
+    /// out of bounds.
+    pub fn get(&self, index: usize) -> Option<u8> {
+        if index >= self.len() {
+            return None;
+        }
+        let consumed = self.consumed();
+        if let Some(ref data) = self.data {
+            Some(data[consumed + index])
+        } else {
+            None
+        }
+    }
+
+    /// Returns a mutable reference to the byte at the index, or
+    /// `None` if the index is out of bounds.
+    pub fn get_mut(&mut self, index: usize) -> Option<&mut u8> {
+        if index >= self.len() {
+            return None;
+        }
+        let consumed = self.consumed();
+        if let Some(ref mut data) = self.data {
+            Some(&mut data[consumed + index])
+        } else {
+            None
+        }
+    }
+
 }
 
 
@@ -867,6 +896,43 @@ mod test {
         buf[5] = b'e';
         buf[8] = b'e';
         assert_eq!(&buf[..], b"leo Merle!");
+    }
+
+    #[test]
+    fn get() {
+        let mut buf = Buf::new();
+        assert_eq!(buf.get(0), None);
+        buf.extend(b"Hello World!");
+        assert_eq!(buf.get(0), Some(b'H'));
+        assert_eq!(buf.get(6), Some(b'W'));
+        assert_eq!(buf.get(11), Some(b'!'));
+        assert_eq!(buf.get(12), None);
+        buf.consume(2);
+        assert_eq!(buf.get(2), Some(b'o'));
+        assert_eq!(buf.get(8), Some(b'd'));
+        assert_eq!(buf.get(9), Some(b'!'));
+        assert_eq!(buf.get(10), None);
+    }
+
+    #[test]
+    fn get_mut() {
+        let mut buf = Buf::new();
+        assert_eq!(buf.get_mut(0), None);
+        buf.extend(b"Hello World!");
+        assert_eq!(buf.get_mut(0), Some(&mut b'H'));
+        if let Some(x) = buf.get_mut(0) { *x = b'h'; }
+        assert_eq!(buf.get_mut(6), Some(&mut b'W'));
+        if let Some(x) = buf.get_mut(6) { *x = b'M'; }
+        assert_eq!(&buf[..], b"hello Morld!");
+        assert_eq!(buf.get_mut(11), Some(&mut b'!'));
+        assert_eq!(buf.get_mut(12), None);
+        buf.consume(2);
+        if let Some(x) = buf.get_mut(1) { *x = b'e'; }
+        if let Some(x) = buf.get_mut(5) { *x = b'e'; }
+        if let Some(x) = buf.get_mut(8) { *x = b'e'; }
+        assert_eq!(&buf[..], b"leo Merle!");
+        assert_eq!(buf.get_mut(9), Some(&mut b'!'));
+        assert_eq!(buf.get_mut(10), None);
     }
 
     #[test]
