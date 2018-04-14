@@ -169,7 +169,8 @@ impl Buf {
     ///
     /// The `RangeArgument` type is a temporary type until rust provides
     /// the one in standard library, you should use the range syntax directly:
-    /// ```
+    ///
+    /// ```ignore
     ///     buf.remove_range(5..7)
     /// ```
     ///
@@ -557,7 +558,7 @@ impl IndexMut<RangeFrom<usize>> for Buf {
         assert!(idx <= self.len());
         let consumed = self.consumed();
         let remaining = self.remaining();
-        let mut buf = self.data.as_mut().unwrap();
+        let buf = self.data.as_mut().unwrap();
         let len = buf.len();
         &mut buf[consumed + idx .. len - remaining]
     }
