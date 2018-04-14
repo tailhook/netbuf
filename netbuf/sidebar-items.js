@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["RangeArgument","Temporary type until the one in stdlib is made stable"]],"struct":[["Buf","A buffer object to be used for reading from network"]]});
