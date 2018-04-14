@@ -1,3 +1,9 @@
+//! # Netbuf
+//!
+//! [Documentation](https://docs.rs/netbuf) |
+//! [Github](https://github.com/tailhook/netbuf) |
+//! [Crate](https://crates.io/crates/netbuf)
+//!
 //! This module currently includes single `Buf` struct for holding buffers.
 //! Comparing to `Vec` class buffer has different allocation policy and has
 //! a marker of consumed data (i.e. already processed by protocol parser or

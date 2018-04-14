@@ -1,13 +1,9 @@
-======
 Netbuf
 ======
 
-
-:Status: beta
-:Documentation: http://tailhook.github.io/netbuf/
-:Travis:
-    .. image:: https://travis-ci.org/tailhook/netbuf.svg?branch=master
-        :target: https://travis-ci.org/tailhook/netbuf
+[Documentation](https://docs.rs/netbuf) |
+[Github](https://github.com/tailhook/netbuf) |
+[Crate](https://crates.io/crates/netbuf)
 
 The network buffer for usage in asynchronous network applications. Has right
 interface for reading from network into the ``Buf`` and for parsing packets

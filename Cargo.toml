@@ -4,8 +4,9 @@ description = """
     The simple to use, growable, contiguous buffer object with right
     assumptions and interface. Tuned for using it for network buffers.
 """
-readme = "README.rst"
+readme = "README.md"
 keywords = ["buf", "netbuf", "network", "buffer", "vec"]
+categories = ["network-programming", "memory-management"]
 version = "0.4.0"
 authors = ["Paul Colomiets <paul@colomiets.name>"]
 license = "MIT"
