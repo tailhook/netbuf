@@ -1,17 +1,34 @@
-language: rust
-rust:
-- stable
-- beta
-- nightly
 sudo: false
-env:
-- secure: "XVia3JTzZ/YwgRpLvPpRHseFW64PzPRlywbBD4iiIzGiTcOanXQAFfFZi8M+WCD6SPQDwr5Y7scmkIReClPFC1vql0D4zfzDwE13EOLUoyFqL5OYrPu5is6nXdbq8XEn8RGaqborT7GR66cIkcgfCmKxyBMXCXBbS6ols23gpWOyCIJveg3UhM3Fq4YsR5MoM6IekvXAGTFsTaVQCAJVX0HTB9oRJRmUWUXq3elL+dfxEICmeILSjNAWpQc0afoNfijXIzw3+SU5xD6hfy+7tkgtj6M1n4UaR5KUMQitnhgJ1QOKCH+YZvpOvUNgOIP4mTj0xlJNSWanbHLx68h+twP6XOr0vF+rc42KgzpmVkdJBKK9CZJ1jqps+4TAJsDMlBq/K2d/3u191nO+xsVPy6Wq87j4P40sIsLbVlk7cNVJk2V+mbAPq+mJeyWxzmuP+dJ12BhCBZ3Rsh2Rqq7cmk1XLtgfY3dzC4cXcKHf9LOUgfGMP7kuvyBbdbFL/LLYWxUwWAqaGzh0gAmAzmIYBEeNsMoFwKDJ57vwPKTCrvmY2I9z5IKHL1UiQlS0PUAeG6ZKMk5FuBHY4litEI/29VSfUKjvGu09qp/N2JQfxm+TwhyBeXAizDBFhQ9GcJxMgk3u9WEqCxX9OH8BnK1sm1cwbPZ5WK4P+BPn6aI5fpo="
-after_success: |
-  [ $TRAVIS_RUST_VERSION = stable ] &&
-  [ $TRAVIS_BRANCH = master ] &&
-  [ $TRAVIS_PULL_REQUEST = false ] &&
-  cargo doc &&
-  echo "<meta http-equiv=refresh content=0;url=`echo $TRAVIS_REPO_SLUG | cut -d '/' -f 2`/index.html>" > target/doc/index.html &&
-  pip install ghp-import --user &&
-  ~/.local/bin/ghp-import -n target/doc &&
-  git push -fq https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages
+dist: trusty
+language: rust
+
+cache:
+- cargo
+
+before_cache:
+- rm -r $TRAVIS_BUILD_DIR/target/debug
+
+jobs:
+  include:
+  - os: linux
+    rust: stable
+  - os: linux
+    rust: beta
+  - os: linux
+    rust: nightly
+
+  # deploy
+  - stage: publish
+    os: linux
+    rust: stable
+    env:
+    # CARGO_TOKEN
+    - secure: "ZFVUuLLY6PZwc8kjUfGeEK8rrWa01sXEkB3APIxTnQQSP/VPkNcIRZtIjY3KPYwWBZqrrICclEzMJ7llgk58Sk8rfLI33mk4br1QFq+R0eCeW4YnDu7jTpZqjyXhWwStzE83RbXMqdElMnOntrQQLp2t2qNfqcZ58T9knt2qJfNM5MUNqN3ytP30as+nYRBSvv3mrYqKTe24tj4YwfUMFNeVr48FUPo99kOXeRfhaVpJVlm/id7mnYVq3VoXexTLMT/TTq5r5838SxMkl+8VD34wPerNrWsHyFunbn+nl/0W51iJ12+KxBjQb2FmJIkerZREkOOIkcdk8d3qeEIFTOlW7aSCapMDehVj+4/UtvnIXb1MClxphKFC6+Rpy52zzfufh7IJmjDzwzCUfGvTqbGWsghwQzxRp4yAoN8x0JQSRi6Zes5N0njZ7gFEdihBkwfmc/XYyOyGgpwkpOeHd/aqLT8kpZGDhgevzQtBleMgJuC5bob4+jvVAF3Q2NP6h4AriUvOgH14aCaW1/EAV4TUkUAvDIe5nGb6rT6WgBYjFInMD/Ny5dEENg6wDfqX3OAmHDPaYlIcLnb7XaRI/s9t2bSw/6kRRVlkgM4dwEtptD7u8MzF190m22fiGWCy7LvXjI2xME3kQAxZnElV+RNK7j5qaByL4tqsyiBh/7E="
+    install: true
+    script: true
+
+    deploy:
+    - provider: script
+      script: 'cargo publish --verbose --token=$CARGO_TOKEN'
+      on:
+        tags: true

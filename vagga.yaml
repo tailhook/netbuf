@@ -22,6 +22,11 @@ commands:
       rm -rf target/cov
       kcov target/cov target/debug/netbuf-638268726e961e5a
 
+  _bulk: !Command
+    description: Run `bulk` command (for version bookkeeping)
+    container: ubuntu
+    run: [bulk]
+
   cargo: !Command
     description: Run any cargo command
     container: ubuntu
@@ -38,7 +43,7 @@ containers:
     setup:
     - !Ubuntu xenial
     - !UbuntuUniverse
-    - !Install [make, wget, ca-certificates,
+    - !Install [make, wget, ca-certificates, vim,
                 libssl-dev, build-essential]
 
     - !TarInstall
@@ -49,6 +54,10 @@ containers:
     - !BuildDeps [libcurl4-openssl-dev, libelf-dev, libdw-dev, cmake,
                   python, pkg-config]
     - !Install [libdw1, libelf1, libcurl3]
+    - &bulk !Tar
+      url: "https://github.com/tailhook/bulk/releases/download/v0.4.11/bulk-v0.4.11.tar.gz"
+      sha256: b718bb8448e726690c94d98d004bf7575f7a429106ec26ad3faf11e0fd9a7978
+      path: /
     - !GitInstall
       url: git://github.com/SimonKagstrom/kcov
       script: |
