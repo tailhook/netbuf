@@ -9,7 +9,7 @@ keywords = ["buf", "netbuf", "network", "buffer", "vec"]
 categories = ["network-programming", "memory-management"]
 version = "0.4.0"
 authors = ["Paul Colomiets <paul@colomiets.name>"]
-license = "MIT"
+license = "MIT/Apache-2.0"
 documentation = "http://tailhook.github.io/netbuf/"
 repository = "http://github.com/tailhook/netbuf"
 
